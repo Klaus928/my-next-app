@@ -1,13 +1,57 @@
 'use client'
  
 import { login } from '@/app/actions/auth'
-import { useActionState } from 'react'
-import { useState, useEffect } from 'react'
+import { useActionState, startTransition } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useRouter } from 'next/navigation'
+// 不再需要外部CryptoJS依赖
+
+// 使用Web Crypto API加密密码
+const encryptPassword = async (text: string): Promise<string> => {
+  try {
+    // 从环境变量中读取加密密钥
+    const SECRET_KEY = process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'fallback-secret-key'; // 使用NEXT_PUBLIC前缀使其在客户端可用
+    
+    // 创建编码器
+    const encoder = new TextEncoder();
+    const textData = encoder.encode(text);
+    
+    // 创建密钥
+    const keyData = encoder.encode(SECRET_KEY.padEnd(32, '0').substring(0, 32));
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'AES-CBC' },
+      false,
+      ['encrypt']
+    );
+    
+    // 生成随机IV
+    const iv = crypto.getRandomValues(new Uint8Array(16));
+    
+    // 加密数据
+    const encryptedData = await crypto.subtle.encrypt(
+      { name: 'AES-CBC', iv },
+      cryptoKey,
+      textData
+    );
+    
+    // 转换为十六进制格式（IV:密文）
+    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encryptedData))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    return `${ivHex}:${encryptedHex}`;
+  } catch (error) {
+    console.error('加密失败，将使用原始密码', error);
+    return text;
+  }
+}
  
 export default function LoginForm() {
   const [state, action, pending] = useActionState(login, undefined)
@@ -27,7 +71,30 @@ export default function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={action} className="space-y-4">
+        <form 
+          action={async (formData) => {
+            // 创建新的FormData对象
+            const encryptedFormData = new FormData();
+            
+            // 获取所有表单字段
+            const entries = Array.from(formData.entries());
+            
+            // 处理密码字段的加密
+            for (const [key, value] of entries) {
+              if (key === 'password' && typeof value === 'string') {
+                // 加密密码
+                const encryptedPass = await encryptPassword(value);
+                encryptedFormData.set(key, encryptedPass);
+              } else {
+                encryptedFormData.set(key, value);
+              }
+            }
+            
+            // 使用startTransition包装action调用，符合useActionState的要求
+            return startTransition(() => action(encryptedFormData));
+          }}
+          className="space-y-4"
+        >
           <div className="space-y-2">
             <Label htmlFor="email">邮箱</Label>
             <Input 

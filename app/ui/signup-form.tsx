@@ -1,13 +1,57 @@
 'use client'
  
 import { signup } from '@/app/actions/auth'
-import { useActionState } from 'react'
-import { useState, useEffect } from 'react'
+import { useActionState, startTransition } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useRouter } from 'next/navigation'
+// 不再需要外部CryptoJS依赖
+
+// 使用Web Crypto API加密密码
+async function encryptPassword(text: string): Promise<string> {
+  try {
+    // 从环境变量中读取加密密钥
+    const SECRET_KEY = process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'fallback-secret-key'; // 使用NEXT_PUBLIC前缀使其在客户端可用
+    
+    // 创建编码器
+    const encoder = new TextEncoder();
+    const textData = encoder.encode(text);
+    
+    // 创建密钥
+    const keyData = encoder.encode(SECRET_KEY.padEnd(32, '0').substring(0, 32));
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'AES-CBC' },
+      false,
+      ['encrypt']
+    );
+    
+    // 生成随机IV
+    const iv = crypto.getRandomValues(new Uint8Array(16));
+    
+    // 加密数据
+    const encryptedData = await crypto.subtle.encrypt(
+      { name: 'AES-CBC', iv },
+      cryptoKey,
+      textData
+    );
+    
+    // 转换为十六进制格式（IV:密文）
+    const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('');
+    const encryptedHex = Array.from(new Uint8Array(encryptedData))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    return `${ivHex}:${encryptedHex}`;
+  } catch (error) {
+    console.error('加密失败:', error);
+    return text; // 失败时返回原文以确保流程不会中断
+  }
+}
  
 export default function SignupForm() {
   const [state, action, pending] = useActionState(signup, undefined)
@@ -15,6 +59,23 @@ export default function SignupForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const router = useRouter();
+  
+  // 处理表单提交，在提交前加密密码
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // 创建FormData对象
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('email', email);
+    
+    // 加密密码后再提交
+    const encryptedPassword = await encryptPassword(password);
+    formData.append('password', encryptedPassword);
+    
+    // 使用startTransition包装action调用，符合useActionState的要求
+    startTransition(() => action(formData));
+  };
   
   // 由于useActionState在成功时会重定向，不需要手动重置表单
   // 保留表单状态以处理错误情况
@@ -28,7 +89,7 @@ export default function SignupForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form action={action} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">姓名</Label>
             <Input

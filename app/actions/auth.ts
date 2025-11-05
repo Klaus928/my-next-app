@@ -5,13 +5,24 @@ import bcrypt from 'bcrypt';
 import prisma from '../lib/prisma';
 import { createSession, deleteSession } from '../lib/session';
 import { redirect } from 'next/navigation';
+import crypto from 'crypto';
+
+// 从环境变量中读取加密密钥
+const SECRET_KEY = process.env.ENCRYPTION_KEY || 'fallback-secret-key'; // 实际使用时应确保环境变量已设置
+const ALGORITHM = 'aes-256-cbc';
+const IV_LENGTH = 16; // AES block size
 
 export async function signup(state: FormState, formData: FormData) {
+    // 获取加密后的密码
+    const encryptedPassword = formData.get('password') as string || '';
+    // 解密密码
+    const originalPassword = decryptPassword(encryptedPassword);
+    
     // Validate form fields
     const validatedFields = SignupFormSchema.safeParse({
         name: formData.get('name'),
         email: formData.get('email'),
-        password: formData.get('password'),
+        password: originalPassword,
     })
 
     // If any form fields are invalid, return early
@@ -63,11 +74,42 @@ export async function signup(state: FormState, formData: FormData) {
     redirect('/dashboard')
 }
 
+// 使用Node.js内置crypto模块解密
+function decryptPassword(encryptedText: string): string {
+  try {
+    // 从加密文本中提取IV和密文
+    const textParts = encryptedText.split(':');
+    const iv = Buffer.from(textParts.shift() || '', 'hex');
+    const encryptedData = Buffer.from(textParts.join(':'), 'hex');
+    
+    // 创建解密器
+    const decipher = crypto.createDecipheriv(
+      ALGORITHM, 
+      Buffer.from(SECRET_KEY.padEnd(32, '0').substring(0, 32)), 
+      iv
+    );
+    
+    // 解密数据
+    let decrypted = decipher.update(encryptedData);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    
+    return decrypted.toString();
+  } catch (error) {
+    console.error('解密失败:', error);
+    // 解密失败时返回原文以确保流程不会中断
+    return encryptedText;
+  }
+}
+
 export async function login(state: FormState, formData: FormData) {
+    // 获取密码并尝试解密
+    const rawPassword = formData.get('password');
+    const originalPassword = typeof rawPassword === 'string' ? decryptPassword(rawPassword) : '';
+    
     // Validate form fields
     const validatedFields = LoginFormSchema.safeParse({
         email: formData.get('email'),
-        password: formData.get('password'),
+        password: originalPassword,
     })
 
     // If any form fields are invalid, return early
@@ -78,7 +120,7 @@ export async function login(state: FormState, formData: FormData) {
     }
 
     // Get the validated data
-    const { email, password } = validatedFields.data
+    const { email, password: userPassword } = validatedFields.data
     
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -86,7 +128,7 @@ export async function login(state: FormState, formData: FormData) {
     });
     
     // If user not found or password incorrect, return error
-    if (!user || !user.password || !(await bcrypt.compare(password, user.password))) {
+    if (!user || !user.password || !(await bcrypt.compare(userPassword, user.password))) {
         return {
             message: 'Invalid email or password',
         }
