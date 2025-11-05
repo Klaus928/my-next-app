@@ -1,6 +1,6 @@
 'use client'
  
-import { signup } from '@/app/actions/auth'
+import { login } from '@/app/actions/auth'
 import { useActionState } from 'react'
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,9 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useRouter } from 'next/navigation'
  
-export default function SignupForm() {
-  const [state, action, pending] = useActionState(signup, undefined)
-  const [name, setName] = useState('')
+export default function LoginForm() {
+  const [state, action, pending] = useActionState(login, undefined)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const router = useRouter();
@@ -22,32 +21,20 @@ export default function SignupForm() {
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader>
-        <CardTitle className="text-2xl text-center">注册</CardTitle>
+        <CardTitle className="text-2xl text-center">登录</CardTitle>
         <CardDescription className="text-center">
-          创建新账户以开始使用我们的服务
+          请输入您的邮箱和密码登录账户
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form action={action} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">姓名</Label>
-            <Input
-              id="name"
-              name="name"
-              placeholder="请输入姓名"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            {state?.errors?.name && <p className="text-red-500 text-sm">{state.errors.name}</p>}
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="email">邮箱</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="请输入邮箱"
+            <Input 
+              id="email" 
+              name="email" 
+              placeholder="请输入邮箱" 
+              type="email" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -56,39 +43,32 @@ export default function SignupForm() {
 
           <div className="space-y-2">
             <Label htmlFor="password">密码</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
+            <Input 
+              id="password" 
+              name="password" 
+              type="password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {state?.errors?.password && (
-              <div className="text-red-500 text-sm mt-1">
-                <p className="font-medium mb-1">密码必须满足以下要求：</p>
-                <ul className="list-disc pl-5 space-y-0.5">
-                  {state.errors.password.map((error) => (
-                    <li key={error}>{error}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {state?.errors?.password && <p className="text-red-500 text-sm">{state.errors.password}</p>}
           </div>
           
+          {state?.message && <p className="text-red-500 text-sm">{state.message}</p>}
+          
           <div className="pt-4 space-y-2">
-            <Button
-              type="submit"
-              disabled={pending}
+            <Button 
+              disabled={pending} 
+              type="submit" 
               className="w-full"
             >
-              {pending ? '注册中...' : '注册'}
+              {pending ? '登录中...' : '登录'}
             </Button>
-            <Button
-              variant="ghost"
+            <Button 
+              variant="ghost" 
               className="w-full"
-              onClick={() => router.push('/login')}
+              onClick={() => router.push('/signup')}
             >
-              前往登录页面
+              前往注册页面
             </Button>
           </div>
         </form>
